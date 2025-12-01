@@ -6,6 +6,22 @@ async function readStdin() {
 	return Buffer.concat(chunks).toString('utf8');
 }
 
+function expandExpNotation(x) {
+	let mlist = [];
+	x.split(' ').forEach(m => {
+		let nlist = [];
+		m.split(',').forEach(n => {
+			if (!isNaN(n) && !isNaN(parseFloat(n))) {
+				nlist.push(`${parseFloat(n)}`);
+			} else {
+				nlist.push(n);
+			}
+		})
+		mlist.push(nlist.join(','));
+	})
+	return mlist.join(" ");
+}
+
 function normalizeColor(color) {
 	if (color.startsWith('#')) {
 		if (color.length === 4) {
@@ -32,7 +48,7 @@ function convertElementToPathData(element) {
 	const tagName = element.tagName.toLowerCase();
 
 	if (tagName === 'path') {
-		return element.getAttribute('d') || '';
+		return expandExpNotation(element.getAttribute('d')) || '';
 	} else if (tagName === 'rect') {
 		const x = parseFloat(element.getAttribute('x') || '0');
 		const y = parseFloat(element.getAttribute('y') || '0');
@@ -59,6 +75,16 @@ function convertElementToPathData(element) {
 	return null;
 }
 
+function parseStyleAttribute(style) {
+	const res = {};
+	if (!style) return res;
+	style.split(';').forEach(s => {
+		const [k, v] = s.split(':').map(p => p && p.trim());
+		if (k && v) res[k] = v;
+	});
+	return res;
+}
+
 function convertToVectorDrawable(svg) {
 	const dom = new JSDOM(svg, { contentType: "image/svg+xml" });
 	const svgElement = dom.window.document.documentElement;
@@ -75,12 +101,25 @@ function convertToVectorDrawable(svg) {
 
 	const paths = [];
 	const elements = svgElement.querySelectorAll('path, rect, circle');
+
 	elements.forEach(element => {
 		const pathData = convertElementToPathData(element);
+
 		if (pathData) {
-			const fillColor = element.getAttribute('fill') || '#000000';
-			const strokeColor = element.getAttribute('stroke') || 'none';
-			const strokeWidth = element.getAttribute('stroke-width') || '0';
+			let styleObj = parseStyleAttribute(element.getAttribute('style'));
+
+			let fillColor = element.getAttribute('fill');
+			if ((!fillColor || fillColor === '') && styleObj['fill']) fillColor = styleObj['fill'];
+
+			let strokeColor = element.getAttribute('stroke');
+			if ((!strokeColor || strokeColor === '') && styleObj['stroke']) strokeColor = styleObj['stroke'];
+
+			let strokeWidth = element.getAttribute('stroke-width');
+			if ((!strokeWidth || strokeWidth === '') && styleObj['stroke-width']) strokeWidth = styleObj['stroke-width'];
+
+			if (!fillColor) fillColor = '#000000';
+			if (!strokeColor) strokeColor = 'none';
+			if (!strokeWidth) strokeWidth = '0';
 
 			let path = `    <path\n`;
 			path += `        android:pathData="${pathData}"\n`;
